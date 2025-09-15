@@ -176,7 +176,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue"; // 引入Vue的响应式和生命周期函数
 import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面组件
-import MeasureTool from "@/utils/CesiumUtils/measureDistance";
+import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
 // 定义emit事件
 const emit = defineEmits<{}>();
 

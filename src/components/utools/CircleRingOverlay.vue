@@ -6,31 +6,27 @@
         <div class="outer-circle"></div>
         <!-- 内圆 -->
         <div class="inner-circle"></div>
-        <!-- 环形毛玻璃区域 -->
+        <!-- 环形毛玻璃区域作为父容器 -->
         <Transition name="el-zoom-in-center" appear :duration="{ enter: 600, leave: 400 }">
-          <div v-if="visible" class="ring-area"></div>
-        </Transition>
-        <!-- 圆环项目容器 -->
-        <Transition name="el-fade-in-linear" appear :duration="{ enter: 800, leave: 400 }">
-          <div v-if="visible" class="circular-items-container">
-            <!-- 环形分布的选择器项目 -->
-            <TransitionGroup 
-              name="item-fade" 
-              tag="div" 
-              class="items-wrapper"
-              appear
-              :duration="{ enter: 500, leave: 300 }"
-            >
-              <div 
-                v-for="(item, index) in circularItems" 
-                :key="`${item.id}-${currentIndex}`"
-                :class="['circular-picker-item', { 'selected': index === selectedCircularIndex }]"
-                :style="getCircularItemStyle(index)"
-                @click="index === selectedCircularIndex ? handleItemClick(item) : null"
-              >
-                <div class="item-content">{{ item.label }}</div>
+          <div v-if="visible" class="ring-area">
+            <!-- 圆环项目容器作为子元素 -->
+            <Transition name="el-fade-in-linear" appear :duration="{ enter: 800, leave: 400 }">
+              <div v-if="visible" class="circular-items-container">
+                <!-- 环形分布的选择器项目 -->
+                <!-- 使用固定的DOM元素，只更新内容和样式 -->
+                <div class="items-wrapper">
+                  <div 
+                    v-for="(item, index) in circularItems" 
+                    :key="item.id"
+                    :class="['circular-picker-item', { 'selected': index === selectedCircularIndex }]"
+                    :style="getCircularItemStyle(index)"
+                    @click="index === selectedCircularIndex ? handleItemClick(item) : null"
+                  >
+                    <div class="item-content">{{ item.label }}</div>
+                  </div>
+                </div>
               </div>
-            </TransitionGroup>
+            </Transition>
           </div>
         </Transition>
       <!-- 滚轮交互区域 -->
@@ -146,7 +142,7 @@ const selectedCircularIndex = computed(() => {
   return Math.floor(totalVisibleItems / 2);
 });
 
-// 计算圆环项目的位置样式
+// 计算圆环项目的位置样式 - 优化版本（相对于父容器定位）
 const getCircularItemStyle = (index: number) => {
   const totalItems = totalVisibleItems;
   // 在右半圆分布（-90度到+90度）
@@ -159,13 +155,16 @@ const getCircularItemStyle = (index: number) => {
   const centerOffset = 180 / (totalItems - 1) / 2; // 角度偏移量
   angle -= centerOffset;
   
-  // 圆环半径计算
-  const radiusVh = 50; // 内圆半径
-  const ringWidth = 100; // 环形区域偏移
+  // 圆环半径计算 - 相对于父容器的中心
+  const ringRadius = 50; // vh单位，对应父容器的内圆半径
+  const itemOffset = 100; // 像素偏移，项目在环形区域内的位置
   
   const radian = (angle * Math.PI) / 180;
-  const offsetX = Math.cos(radian);
-  const offsetY = Math.sin(radian);
+  const totalRadius = ringRadius; // 使用vh单位保持一致性
+  
+  // 计算相对于父容器中心的偏移（使用百分比定位）
+  const offsetX = Math.cos(radian) * totalRadius;
+  const offsetY = Math.sin(radian) * totalRadius;
   
   // 选中项目的视觉效果
   const isSelected = index === selectedCircularIndex.value;
@@ -174,12 +173,13 @@ const getCircularItemStyle = (index: number) => {
   
   return {
     position: 'absolute' as const,
-    left: `calc(-50vh + 25vw - 50px + (${radiusVh}vh + ${ringWidth}px) * ${offsetX})`,
-    top: `calc(50vh + (${radiusVh}vh + ${ringWidth}px) * ${offsetY})`,
+    // 使用百分比定位，相对于父容器(.ring-area)的中心
+    left: `calc(50% + ${offsetX}vh + ${itemOffset}px)`,
+    top: `calc(50% + ${offsetY}vh)`,
     transform: `translate(-50%, -50%) scale(${scale})`,
     opacity: opacity,
     zIndex: isSelected ? 150 : 100,
-    '--item-index': index.toString()
+    willChange: 'transform, opacity', // 优化重绘性能
   };
 };
 
@@ -198,9 +198,17 @@ const handleItemClick = (item: ButtonConfig) => {
   item.action();
 };
 
-// 处理滚轮事件
+// 处理滚轮事件 - 优化版本
+const isScrolling = ref(false);
+let scrollTimeout: number | null = null;
+
 const handleWheel = (event: WheelEvent) => {
   event.stopPropagation(); // 避免影响 Cesium 地图
+  
+  // 防抖处理，避免过于频繁的滚动
+  if (isScrolling.value) return;
+  
+  isScrolling.value = true;
   
   if (event.deltaY > 0) {
     // 向下滚动
@@ -209,6 +217,12 @@ const handleWheel = (event: WheelEvent) => {
     // 向上滚动
     currentIndex.value = (currentIndex.value - 1 + buttonConfigs.length) % buttonConfigs.length;
   }
+  
+  // 重置滚动状态
+  if (scrollTimeout) clearTimeout(scrollTimeout);
+  scrollTimeout = window.setTimeout(() => {
+    isScrolling.value = false;
+  }, 100); // 100ms 防抖
 };
 
 // 环形界面管理类
@@ -282,6 +296,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  // 清理定时器
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout);
+  }
   ringManager.destroy();
 });
 </script>
@@ -331,7 +349,7 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 环形毛玻璃区域 */
+/* 环形毛玻璃区域 - 作为父容器 */
 .ring-area {
   position: absolute;
   width: calc(100vh + 400px);
@@ -347,7 +365,7 @@ onUnmounted(() => {
   z-index: 5;
 }
 
-/* 圆环项目容器 */
+/* 圆环项目容器 - 作为子元素，继承父容器的位置 */
 .circular-items-container {
   position: absolute;
   width: 100%;
@@ -365,28 +383,39 @@ onUnmounted(() => {
   height: 100%;
 }
 
-/* 项目过渡动画 */
-.item-fade-enter-active {
-  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transition-delay: calc(var(--item-index, 0) * 50ms);
-}
-
-.item-fade-leave-active {
-  transition: all 0.3s ease-out;
-}
-
-.item-fade-enter-from {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.3) rotate(-10deg);
-}
-
-.item-fade-leave-to {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.8);
-}
-
-.item-fade-move {
-  transition: all 0.4s cubic-bezier(0.55, 0, 0.1, 1);
+/* 优化的圆环选择器项目 */
+.circular-picker-item {
+  min-width: 80px;
+  max-width: 200px;
+  width: auto;
+  height: 40px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  cursor: default;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  position: absolute;
+  z-index: 100;
+  white-space: nowrap;
+  
+  /* 使用 transform 属性进行硬件加速 */
+  will-change: transform, opacity;
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              opacity 0.3s ease,
+              background 0.3s ease,
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
+  
+  /* 移除消耗性能的 backdrop-filter */
+  /* backdrop-filter: blur(8px); */
 }
 
 /* 滚轮交互区域 */
@@ -415,32 +444,6 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-/* 圆环选择器项目 */
-.circular-picker-item {
-  min-width: 80px;
-  max-width: 200px;
-  width: auto;
-  height: 40px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  pointer-events: none;
-  cursor: default;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  position: absolute;
-  z-index: 100;
-  white-space: nowrap;
-}
-
 .circular-picker-item.selected {
   color: rgba(255, 255, 255, 1);
   background: rgba(255, 255, 255, 0.3);
@@ -452,17 +455,16 @@ onUnmounted(() => {
   animation: shimmer 2s ease-in-out infinite;
   pointer-events: auto;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .circular-picker-item.selected:hover {
   background: rgba(255, 255, 255, 0.4);
-  transform: translate(-50%, -50%) scale(1.25);
+  transform: translate(-50%, -50%) scale(1.15); /* 减小缩放避免过度动画 */
   box-shadow: 0 0 35px rgba(255, 255, 255, 0.6);
 }
 
 .circular-picker-item.selected:active {
-  transform: translate(-50%, -50%) scale(1.15);
+  transform: translate(-50%, -50%) scale(1.1); /* 减小缩放 */
 }
 
 /* 闪光动画 */
