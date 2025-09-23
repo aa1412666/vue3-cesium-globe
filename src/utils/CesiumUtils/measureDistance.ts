@@ -13,13 +13,17 @@ type lineOption = {
 export default class MeasureTool {
   viewer: Cesium.Viewer;
   handler: Cesium.ScreenSpaceEventHandler;
-  activePositions: Cesium.Cartesian3[] = [];
-  entities: Cesium.Entity[] = [];
+  entities: Cesium.Entity[] = []; // 移除未使用的 activePositions
   _drawLayer: Cesium.CustomDataSource;
+  private _isActive: boolean = false;
+  private _tooltips: HTMLElement[] = []; // 管理所有tooltip元素
+  
   constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer;
     // 测量工具创建的entity 实体聚合
     this._drawLayer = new Cesium.CustomDataSource("measureLayer");
+    // 将数据源添加到viewer中
+    this.viewer.dataSources.add(this._drawLayer);
     this.handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   }
 
@@ -40,10 +44,6 @@ export default class MeasureTool {
     }
   }
 
-  /**
-   * 获取屏幕坐标位置
-   * @param px
-   */
   /**
    * 根据屏幕坐标获取世界坐标 (Cartesian3)
    * @param position Cesium.Cartesian2 鼠标事件位置
@@ -80,7 +80,8 @@ export default class MeasureTool {
    * 长度测量
    */
   startMeasureLine(options: lineOption = {}) {
-    if (this.viewer) {
+    if (this.viewer && !this._isActive) {
+      this._isActive = true;
       const container = this.viewer.cesiumWidget.container;
 
       let _tooltip = document.createElement("div");
@@ -91,6 +92,9 @@ export default class MeasureTool {
       _tooltip.style.top = "-10000px";
       _tooltip.innerHTML = "单击开始绘制";
       container.append(_tooltip);
+      
+      // 管理tooltip元素
+      this._tooltips.push(_tooltip);
 
       let positions: Cesium.Cartesian3[] = [];
       let segmentLabels: Cesium.Entity[] = [];
@@ -111,7 +115,7 @@ export default class MeasureTool {
         if (index < 1) return; // 至少两个点才有长度
         const start = positions[index - 1];
         const end = positions[index];
-        const distance = Cesium.Cartesian3.distance(start, end);
+        const distance = this.calculateDistance(start, end, 'direct'); // 使用统一的距离计算
 
         // 计算中点位置
         const mid = Cesium.Cartesian3.midpoint(
@@ -193,14 +197,50 @@ export default class MeasureTool {
           }
 
           _tooltip.remove();
+          // 从管理数组中移除
+          const tooltipIndex = this._tooltips.indexOf(_tooltip);
+          if (tooltipIndex > -1) {
+            this._tooltips.splice(tooltipIndex, 1);
+          }
+          
           handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
           handler.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
           handler.removeInputAction(Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+          
+          this._isActive = false;
         },
         Cesium.ScreenSpaceEventType.RIGHT_CLICK
       );
     }
   }
+
+  /**
+   * 统一的距离计算方法
+   * @param start 起点
+   * @param end 终点
+   * @param type 计算类型：'direct' | 'geodesic' | 'terrain'
+   */
+  private calculateDistance(
+    start: Cesium.Cartesian3, 
+    end: Cesium.Cartesian3, 
+    type: 'direct' | 'geodesic' | 'terrain' = 'direct'
+  ): number {
+    switch (type) {
+      case 'direct':
+        return Cesium.Cartesian3.distance(start, end);
+      case 'geodesic':
+        const startCartographic = Cesium.Cartographic.fromCartesian(start);
+        const endCartographic = Cesium.Cartographic.fromCartesian(end);
+        const geodesic = new Cesium.EllipsoidGeodesic();
+        geodesic.setEndPoints(startCartographic, endCartographic);
+        const surfaceDistance = geodesic.surfaceDistance;
+        const heightDiff = endCartographic.height - startCartographic.height;
+        return Math.sqrt(Math.pow(surfaceDistance, 2) + Math.pow(heightDiff, 2));
+      default:
+        return Cesium.Cartesian3.distance(start, end);
+    }
+  }
+  
   /**
    * 在场景中添加一个信息点
    * @param position 点击位置的 Cartesian3
@@ -215,8 +255,8 @@ export default class MeasureTool {
     const lat = Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
     const height = cartographic.height.toFixed(2);
 
-    // 添加一个点实体
-    this.viewer.entities.add({
+    // 添加到 _drawLayer 而不是直接添加到 viewer.entities
+    const entity = this._drawLayer.entities.add({
       position: position,
       point: {
         pixelSize: 10, // 点大小
@@ -227,7 +267,7 @@ export default class MeasureTool {
       },
       label: {
         text: `点位：${
-          positions.length + 1
+          positions.length
         }\n 经度: ${lon}\n纬度: ${lat}\n高程: ${height} m`, // 序号
         font: "16px sans-serif",
         fillColor: Cesium.Color.WHITE,
@@ -239,6 +279,9 @@ export default class MeasureTool {
       },
       description: `经度: ${lon}\n纬度: ${lat}\n高程: ${height} m`,
     });
+    
+    // 添加到管理数组
+    this.entities.push(entity);
   }
 
   /**
@@ -268,16 +311,36 @@ export default class MeasureTool {
     };
   }
   /**
-   * 考虑地球曲率的测量
-   * @param positions
+   * 统一的多点距离计算方法
+   * @param positions WGS84坐标数组或Cartesian3坐标数组
+   * @param type 计算类型：'direct' | 'geodesic' | 'terrain'
    */
-  getPositionDistance(positions: any[]) {
+  async calculateMultiPointDistance(
+    positions: WGS84[] | Cesium.Cartesian3[], 
+    type: 'direct' | 'geodesic' | 'terrain' = 'direct'
+  ): Promise<number> {
+    if (positions.length < 2) return 0;
+    
+    switch (type) {
+      case 'direct':
+        return this.getDirectDistance(positions as Cesium.Cartesian3[]);
+      case 'geodesic':
+        return this.getGeodesicDistance(positions as WGS84[]);
+      case 'terrain':
+        return await this.getTerrainDistance(positions as WGS84[]);
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * 计算直线距离（考虑地球曲率）
+   */
+  private getGeodesicDistance(positions: WGS84[]): number {
     let distance = 0;
     for (let i = 0; i < positions.length - 1; i++) {
       let point1cartographic = this.transformWGS84ToCartographic(positions[i]);
-      let point2cartographic = this.transformWGS84ToCartographic(
-        positions[i + 1]
-      );
+      let point2cartographic = this.transformWGS84ToCartographic(positions[i + 1]);
       let geodesic = new Cesium.EllipsoidGeodesic();
       geodesic.setEndPoints(point1cartographic, point2cartographic);
       let s = geodesic.surfaceDistance;
@@ -291,16 +354,25 @@ export default class MeasureTool {
   }
 
   /**
-   * 考虑地形的测量
-   * @param positions
+   * 计算直线距离
    */
-  getPositionDistanceTerrain(positions: any[]) {
-    let $this = this;
+  private getDirectDistance(positions: Cesium.Cartesian3[]): number {
+    let distance = 0;
+    for (let i = 0; i < positions.length - 1; i++) {
+      distance += Cesium.Cartesian3.distance(positions[i], positions[i + 1]);
+    }
+    return distance;
+  }
+
+  /**
+   * 计算地形距离
+   */
+  private async getTerrainDistance(positions: WGS84[]): Promise<number> {
     return new Promise((resolve) => {
-      let lerpArray = [];
+      let lerpArray: Cesium.Cartographic[] = [];
       for (let j = 1; j < positions.length; j++) {
-        let start = $this.transformWGS84ToCartesian(positions[j - 1]);
-        let end = $this.transformWGS84ToCartesian(positions[j]);
+        let start = this.transformWGS84ToCartesian(positions[j - 1]);
+        let end = this.transformWGS84ToCartesian(positions[j]);
 
         if (start && end) {
           //插值个数
@@ -338,17 +410,17 @@ export default class MeasureTool {
 
       //地形细节采样：传入 目标地形 和 制图坐标插值组（不贴附地形） 获取 贴地形的制图坐标插值组 再计算距离
       Cesium.sampleTerrainMostDetailed(
-        $this.viewer.terrainProvider,
+        this.viewer.terrainProvider,
         lerpArray
       ).then((cartographicArr) => {
         this.getDetailedTerrainDistance(cartographicArr).then((distance) => {
-          resolve(distance);
+          resolve(distance as number);
         });
       });
     });
   }
 
-  getDetailedTerrainDistance(cartographicArr: Cesium.Cartographic[]) {
+  private getDetailedTerrainDistance(cartographicArr: Cesium.Cartographic[]): Promise<number> {
     return new Promise((resolve) => {
       let terrainDistance = 0;
       cartographicArr.map((currentCartographic, index) => {
@@ -377,56 +449,61 @@ export default class MeasureTool {
   //添加坐标点
 
   /**
-   * 笛卡尔转84 数组
-   * @param cartesianArr
-   */
-  transformCartesianArrayToWGS84Array(cartesianArr: Cesium.Cartesian3[]) {
-    if (this.viewer) {
-      return cartesianArr
-        ? cartesianArr.map((item) => {
-            return this.transformCartesianToWGS84(item);
-          })
-        : [];
-    }
-  }
-
-  /**
-   * 84转笛卡尔 数组
-   * @param cartesianArr
-   */
-  transformWGS84ArrayToCartesianArray(WSG84Arr: WGS84[]) {
-    if (this.viewer && WSG84Arr) {
-      return WSG84Arr
-        ? WSG84Arr.map((item) => {
-            return this.transformWGS84ToCartesian(item);
-          })
-        : [];
-    }
-  }
-  /**
    * 停止当前测量
    */
   stop() {
     this.handler?.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
-    this.handler?.removeInputAction(
-      Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
-    );
+    this.handler?.removeInputAction(Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+    this.handler?.removeInputAction(Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+    this.handler?.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+    
+    // 清理所有tooltip
+    this._tooltips.forEach(tooltip => {
+      if (tooltip.parentNode) {
+        tooltip.parentNode.removeChild(tooltip);
+      }
+    });
+    this._tooltips = [];
+    
+    this._isActive = false;
   }
 
   /**
    * 清空已有的测量图形
    */
   clear() {
-    this.entities.forEach((entity) => this.viewer.entities.remove(entity));
+    // 停止当前测量
+    this.stop();
+    
+    // 清空 _drawLayer 中的所有实体（包括折线、标签等）
+    this._drawLayer.entities.removeAll();
+    
+    // 清空管理数组
     this.entities = [];
-    this.activePositions = [];
+    
+    console.log('测量图形已清空');
   }
 
   /**
-   * 销毁
+   * 销毁测量工具
    */
   destroy() {
+    // 清空所有测量图形
     this.clear();
+    
+    // 从viewer中移除数据源
+    if (this.viewer && this.viewer.dataSources.contains(this._drawLayer)) {
+      this.viewer.dataSources.remove(this._drawLayer);
+    }
+    
+    // 销毁事件处理器
     this.handler?.destroy();
+    
+    // 清理引用
+    (this as any).viewer = null;
+    (this as any).handler = null;
+    (this as any)._drawLayer = null;
+    
+    console.log('测量工具已销毁');
   }
 }
