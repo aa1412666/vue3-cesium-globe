@@ -172,9 +172,9 @@ export default class MeasureTool {
                   cartesian,
                   new Cesium.Cartesian3()
                 );
-                lastLabel.position = mid;
+                lastLabel.position = new Cesium.ConstantPositionProperty(mid);
                 const distance = Cesium.Cartesian3.distance(start, cartesian);
-                lastLabel.label!.text = distance.toFixed(2) + " 米";
+                (lastLabel.label as any).text = new Cesium.ConstantProperty(distance.toFixed(2) + " 米");
               }
             }
           }
@@ -253,6 +253,19 @@ export default class MeasureTool {
           position.alt
         )
       : Cesium.Cartographic.ZERO;
+  }
+
+  /**
+   * 笛卡尔坐标转WGS84
+   * @param cartesian
+   */
+  transformCartesianToWGS84(cartesian: Cesium.Cartesian3): WGS84 {
+    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    return {
+      lng: Cesium.Math.toDegrees(cartographic.longitude),
+      lat: Cesium.Math.toDegrees(cartographic.latitude),
+      alt: cartographic.height
+    };
   }
   /**
    * 考虑地球曲率的测量
@@ -370,7 +383,7 @@ export default class MeasureTool {
   transformCartesianArrayToWGS84Array(cartesianArr: Cesium.Cartesian3[]) {
     if (this.viewer) {
       return cartesianArr
-        ? cartesianArr.map(function (item) {
+        ? cartesianArr.map((item) => {
             return this.transformCartesianToWGS84(item);
           })
         : [];
@@ -384,7 +397,7 @@ export default class MeasureTool {
   transformWGS84ArrayToCartesianArray(WSG84Arr: WGS84[]) {
     if (this.viewer && WSG84Arr) {
       return WSG84Arr
-        ? WSG84Arr.map(function (item) {
+        ? WSG84Arr.map((item) => {
             return this.transformWGS84ToCartesian(item);
           })
         : [];
