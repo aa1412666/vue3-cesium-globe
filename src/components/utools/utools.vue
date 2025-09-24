@@ -72,7 +72,7 @@
               />
             </svg>
           </button>
-          <button class="tool-btn" title="地表距离">
+          <button class="tool-btn" title="地表距离" @click="startMeasureSurface">
             <svg
               class="icon"
               viewBox="0 0 1024 1024"
@@ -177,6 +177,7 @@
 import { ref, onMounted, onUnmounted } from "vue"; // 引入Vue的响应式和生命周期函数
 import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面组件
 import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
+import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";
 // 定义emit事件
 const emit = defineEmits<{}>();
 
@@ -223,9 +224,17 @@ class MeasureButton extends BaseButton {
     console.log(`${this.name} button clicked, active: ${this.isActive.value}`);
   }
 }
+
+// 启动测量线功能
 const startMeasureLine = () => {
   new MeasureTool(window._earth.viewer).startMeasureLine();
 };
+
+// 启动测量面功能
+const startMeasureSurface = () => {
+  new MeasureSurfaceDistance(window._earth.viewer).start();
+};
+
 // 功能按钮类
 class FunctionButton extends BaseButton {
   constructor() {
