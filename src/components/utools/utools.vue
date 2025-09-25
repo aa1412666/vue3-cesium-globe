@@ -90,7 +90,7 @@
               />
             </svg>
           </button>
-          <button class="tool-btn" title="投影距离">
+          <button class="tool-btn" title="投影距离" @click="startMeasureProjected">
             <svg
               class="icon"
               viewBox="0 0 1024 1024"
@@ -177,7 +177,8 @@
 import { ref, onMounted, onUnmounted } from "vue"; // 引入Vue的响应式和生命周期函数
 import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面组件
 import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
-import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";
+import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
+import MeasureProjectedDistance from "@/utils/CesiumUtils/measureProjectedDistance";// 引入测量投影距离类
 // 定义emit事件
 const emit = defineEmits<{}>();
 
@@ -234,6 +235,12 @@ const startMeasureLine = () => {
 const startMeasureSurface = () => {
   new MeasureSurfaceDistance(window._earth.viewer).start();
 };
+
+// 启动测量投影距离功能
+const startMeasureProjected = () => {
+  new MeasureProjectedDistance(window._earth.viewer).start();
+};
+
 
 // 功能按钮类
 class FunctionButton extends BaseButton {
@@ -367,6 +374,7 @@ onUnmounted(() => {
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
 }
 
+// 激活状态下的悬停效果
 .tool-btn.active:hover {
   background: rgba(255, 255, 255, 0.25);
 }
@@ -379,6 +387,8 @@ onUnmounted(() => {
 .tool-wrapper {
   position: relative;
 }
+
+// 测量工具面板
 .measure-tools-panel {
   position: absolute;
   top: 0;
@@ -388,11 +398,13 @@ onUnmounted(() => {
   grid-auto-rows: 44px;
   gap: 8px 8px;
   padding: 24px 6px 4px 6px; /* 增加顶部padding为标题留空间 */
-  background: rgba(20, 20, 20, 0.55);
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
 }
+
+// 面板标题
 .panel-title {
   position: absolute;
   top: 4px; /* 调整到面板内部 */

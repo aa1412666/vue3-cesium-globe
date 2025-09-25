@@ -444,6 +444,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 
+// 选中状态样式
 .circular-picker-item.selected {
   color: rgba(255, 255, 255, 1);
   background: rgba(255, 255, 255, 0.3);
