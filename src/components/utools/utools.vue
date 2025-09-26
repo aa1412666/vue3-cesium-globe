@@ -105,7 +105,7 @@
             </svg>
           </button>
           <!-- 行2: 投影面积 / 三角测量 / 方位角 -->
-          <button class="tool-btn" title="投影面积">
+          <button class="tool-btn" title="投影面积" @click="startMeasureProjectedArea">
             <svg
               class="icon"
               viewBox="0 0 1024 1024"
@@ -179,6 +179,7 @@ import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面�
 import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
 import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
 import MeasureProjectedDistance from "@/utils/CesiumUtils/measureProjectedDistance";// 引入测量投影距离类
+import MeasureProjectedArea from "@/utils/CesiumUtils/measureProjectedArea";// 引入测量投影面积类
 // 定义emit事件
 const emit = defineEmits<{}>();
 
@@ -239,6 +240,11 @@ const startMeasureSurface = () => {
 // 启动测量投影距离功能
 const startMeasureProjected = () => {
   new MeasureProjectedDistance(window._earth.viewer).start();
+};
+
+// 启动测量投影面积功能
+const startMeasureProjectedArea = () => {
+  new MeasureProjectedArea(window._earth.viewer).start();
 };
 
 
