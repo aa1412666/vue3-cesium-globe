@@ -180,6 +180,17 @@
               />
             </svg>
           </button>
+          <button class="tool-btn" title="选择模型并放置(视野中心) | 右键撤销最近" @click="selectAndPlaceModel" @contextmenu.prevent="undoLastPlacedModel">
+            <svg
+              class="icon"
+              viewBox="0 0 1024 1024"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path d="M512 96l128 128H640V480H384V224H384L512 96z" fill="#ffffff"/>
+              <path d="M256 512h512v256a64 64 0 0 1-64 64H320a64 64 0 0 1-64-64V512z" fill="#ffffff"/>
+            </svg>
+          </button>
         </div>
       </Transition>
     </div>
@@ -288,6 +299,57 @@ const clearFighter = () => {
     fighterRemove();
     fighterRemove = null;
   }
+};
+
+// 选择模型并放置（放在视野中心）
+const placedModelRemovers: Array<() => void> = [];
+
+const getViewCenterCartographic = (viewer: any): { lon: number; lat: number; height: number } | null => {
+  const scene = viewer.scene;
+  const globe = scene.globe;
+  const width = scene.canvas.width;
+  const height = scene.canvas.height;
+  const center = new Cesium.Cartesian2(width / 2, height / 2);
+  const ray = viewer.camera.getPickRay(center);
+  const cartesian = globe.pick(ray, scene);
+  if (!cartesian) return null;
+  const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cartesian);
+  return {
+    lon: Cesium.Math.toDegrees(carto.longitude),
+    lat: Cesium.Math.toDegrees(carto.latitude),
+    height: carto.height ?? 0,
+  };
+};
+
+const placeModelAt = (url: string, lon: number, lat: number, height = 0, scale = 1) => {
+  const viewer = window._earth.viewer;
+  const { remove, flyTo } = addModelEntity(
+    viewer,
+    url,
+    lon,
+    lat,
+    height,
+    { heading: 0, pitch: 0, roll: 0 },
+    { scale, minimumPixelSize: 32, maximumScale: 5000 }
+  );
+  placedModelRemovers.push(remove);
+  flyTo();
+};
+
+const selectAndPlaceModel = () => {
+  const defaultUrl = "/models/super_tucano_fab/scene.gltf";
+  const url = window.prompt("输入模型URL(支持/public下相对路径或完整URL)", defaultUrl);
+  if (!url) return;
+  const viewer = window._earth.viewer;
+  const center = getViewCenterCartographic(viewer) || { lon: 116.397463, lat: 39.90869, height: 0 };
+  const scaleStr = window.prompt("输入缩放系数(可选)", "1");
+  const scale = scaleStr ? Number(scaleStr) || 1 : 1;
+  placeModelAt(url, center.lon, center.lat, Math.max(center.height, 0), scale);
+};
+
+const undoLastPlacedModel = () => {
+  const remove = placedModelRemovers.pop();
+  if (remove) remove();
 };
 
 
