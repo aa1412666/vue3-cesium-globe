@@ -167,6 +167,19 @@
               />
             </svg>
           </button>
+          <button class="tool-btn" title="放置战斗机(左键放置,右键清除)" @click="placeFighter" @contextmenu.prevent="clearFighter">
+            <svg
+              class="icon"
+              viewBox="0 0 1024 1024"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M928 512c0 35.3-28.7 64-64 64H656l-88 240h-64l-56-240H352l-80 96h-96l64-160-64-160h96l80 96h40l56-240h64l88 240h208c35.3 0 64 28.7 64 64z"
+                fill="#ffffff"
+              />
+            </svg>
+          </button>
         </div>
       </Transition>
     </div>
@@ -180,6 +193,7 @@ import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工
 import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
 import MeasureProjectedDistance from "@/utils/CesiumUtils/measureProjectedDistance";// 引入测量投影距离类
 import MeasureProjectedArea from "@/utils/CesiumUtils/measureProjectedArea";// 引入测量投影面积类
+import { addModelEntity } from "@/utils/CesiumUtils/addModel"; // 引入模型加载工具
 // 定义emit事件
 const emit = defineEmits<{}>();
 
@@ -245,6 +259,35 @@ const startMeasureProjected = () => {
 // 启动测量投影面积功能
 const startMeasureProjectedArea = () => {
   new MeasureProjectedArea(window._earth.viewer).start();
+};
+
+// 放置战斗机（Entity 方式）
+let fighterRemove: null | (() => void) = null;
+const placeFighter = async () => {
+  if (fighterRemove) {
+    fighterRemove();
+    fighterRemove = null;
+  }
+  const viewer = window._earth.viewer;
+  const url = "/models/super_tucano_fab/scene.gltf"; // 请确保该目录在 public 下
+  const { remove, flyTo } = addModelEntity(
+    viewer,
+    url,
+    116.397463,
+    39.90869,
+    100,
+    { heading: 0, pitch: 0, roll: 0 },
+    { scale: 1, minimumPixelSize: 64, maximumScale: 2000 }
+  );
+  fighterRemove = remove;
+  flyTo();
+};
+
+const clearFighter = () => {
+  if (fighterRemove) {
+    fighterRemove();
+    fighterRemove = null;
+  }
 };
 
 
