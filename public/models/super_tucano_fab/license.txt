@@ -1,0 +1,11 @@
+Model Information:
+* title:	Super Tucano FAB
+* source:	https://sketchfab.com/3d-models/super-tucano-fab-017824164b9e40749a67b87edbbcab92
+* author:	KOG_THORNS (https://sketchfab.com/ioai25312)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Super Tucano FAB" (https://sketchfab.com/3d-models/super-tucano-fab-017824164b9e40749a67b87edbbcab92) by KOG_THORNS (https://sketchfab.com/ioai25312) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
