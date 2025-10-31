@@ -3,6 +3,7 @@
   - addModelEntity: 使用 viewer.entities 加载 glTF/GLB
   - addModelPrimitive: 使用 scene.primitives 加载 Cesium.Model
 */
+import * as Cesium from "cesium";
 
 export type DegreesHPR = {
   heading?: number; // 度
