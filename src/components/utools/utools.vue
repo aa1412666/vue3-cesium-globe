@@ -194,11 +194,21 @@
         </div>
       </Transition>
     </div>
+    <!-- 2D/3D 切换按钮（右上角常驻） -->
+    <button
+      class="tool-btn mode-toggle-btn"
+      :title="is2D ? '切换到3D' : '切换到2D'"
+      @click="toggle2D3D"
+      key="toggle-2d3d-btn"
+    >
+      <span class="mode-label">{{ is2D ? '2D' : '3D' }}</span>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue"; // 引入Vue的响应式和生命周期函数
+import * as Cesium from "cesium";
 import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面组件
 import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
 import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
@@ -279,7 +289,7 @@ const placeFighter = async () => {
     fighterRemove();
     fighterRemove = null;
   }
-  const viewer = window._earth.viewer;
+  const viewer = (window as any)._earth.viewer;
   const url = "/models/super_tucano_fab/scene.gltf"; // 请确保该目录在 public 下
   const { remove, flyTo } = addModelEntity(
     viewer,
@@ -322,7 +332,7 @@ const getViewCenterCartographic = (viewer: any): { lon: number; lat: number; hei
 };
 
 const placeModelAt = (url: string, lon: number, lat: number, height = 0, scale = 1) => {
-  const viewer = window._earth.viewer;
+  const viewer = (window as any)._earth.viewer;
   const { remove, flyTo } = addModelEntity(
     viewer,
     url,
@@ -409,6 +419,7 @@ const toolbarManager = new ToolbarManager();
 // 便捷的访问属性
 const showMeasureTools = ref(false);
 const showCircleRing = ref(false);
+const is2D = ref(false);
 
 // 响应式更新显示状态
 const updateDisplayStates = () => {
@@ -431,11 +442,31 @@ const onFunctionClick = () => {
 // 生命周期钩子
 onMounted(() => {
   toolbarManager.init();
+  // 初始化 2D/3D 状态并监听形态切换完成事件
+  const viewer = window._earth.viewer;
+  if (viewer && viewer.scene) {
+    is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
+    viewer.scene.morphComplete.addEventListener(() => {
+      is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
+    });
+  }
 });
 
 onUnmounted(() => {
   toolbarManager.destroy();
 });
+
+// 2D/3D 切换
+const toggle2D3D = () => {
+  const viewer = window._earth.viewer;
+  const scene = viewer.scene;
+  // 根据当前模式进行形态切换，过渡动画时长约 0.8s
+  if (scene.mode === Cesium.SceneMode.SCENE2D) {
+    scene.morphTo3D(0.8);
+  } else {
+    scene.morphTo2D(0.8);
+  }
+};
 </script>
 
 <style scoped lang="scss">
@@ -497,6 +528,14 @@ onUnmounted(() => {
 }
 .tool-wrapper {
   position: relative;
+}
+
+/* 2D/3D 切换按钮文字样式 */
+.mode-toggle-btn .mode-label {
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 12px;
 }
 
 // 测量工具面板
