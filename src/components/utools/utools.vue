@@ -264,22 +264,30 @@ class MeasureButton extends BaseButton {
 
 // 启动测量线功能
 const startMeasureLine = () => {
-  new MeasureTool(window._earth.viewer).startMeasureLine();
+  const viewer = getViewer();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法开始空间距离测量');
+  new MeasureTool(viewer).startMeasureLine();
 };
 
 // 启动测量面功能
 const startMeasureSurface = () => {
-  new MeasureSurfaceDistance(window._earth.viewer).start();
+  const viewer = getViewer();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法开始地表距离测量');
+  new MeasureSurfaceDistance(viewer).start();
 };
 
 // 启动测量投影距离功能
 const startMeasureProjected = () => {
-  new MeasureProjectedDistance(window._earth.viewer).start();
+  const viewer = getViewer();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法开始投影距离测量');
+  new MeasureProjectedDistance(viewer).start();
 };
 
 // 启动测量投影面积功能
 const startMeasureProjectedArea = () => {
-  new MeasureProjectedArea(window._earth.viewer).start();
+  const viewer = getViewer();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法开始投影面积测量');
+  new MeasureProjectedArea(viewer).start();
 };
 
 // 放置战斗机（Entity 方式）
@@ -289,7 +297,8 @@ const placeFighter = async () => {
     fighterRemove();
     fighterRemove = null;
   }
-  const viewer = (window as any)._earth.viewer;
+  const viewer = getViewer();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法放置战斗机');
   const url = "/models/super_tucano_fab/scene.gltf"; // 请确保该目录在 public 下
   const { remove, flyTo } = addModelEntity(
     viewer,
@@ -314,6 +323,23 @@ const clearFighter = () => {
 // 选择模型并放置（放在视野中心）
 const placedModelRemovers: Array<() => void> = [];
 
+// 安全获取 Viewer
+const getViewer = () => (window as any)?._earth?.viewer as any | undefined;
+// 等待 Viewer 就绪（避免组件挂载早于 Cesium 初始化）
+const waitForViewerReady = (maxTries = 50, intervalMs = 200): Promise<any | null> => {
+  return new Promise((resolve) => {
+    let tries = 0;
+    const tick = () => {
+      const v = getViewer();
+      if (v) return resolve(v);
+      tries++;
+      if (tries >= maxTries) return resolve(null);
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
+};
+
 const getViewCenterCartographic = (viewer: any): { lon: number; lat: number; height: number } | null => {
   const scene = viewer.scene;
   const globe = scene.globe;
@@ -332,7 +358,11 @@ const getViewCenterCartographic = (viewer: any): { lon: number; lat: number; hei
 };
 
 const placeModelAt = (url: string, lon: number, lat: number, height = 0, scale = 1) => {
-  const viewer = (window as any)._earth.viewer;
+  const viewer = getViewer();
+  if (!viewer) {
+    console.warn('[utools] Viewer 未就绪，无法放置模型');
+    return;
+  }
   const { remove, flyTo } = addModelEntity(
     viewer,
     url,
@@ -350,7 +380,11 @@ const selectAndPlaceModel = () => {
   const defaultUrl = "/models/super_tucano_fab/scene.gltf";
   const url = window.prompt("输入模型URL(支持/public下相对路径或完整URL)", defaultUrl);
   if (!url) return;
-  const viewer = window._earth.viewer;
+  const viewer = getViewer();
+  if (!viewer) {
+    console.warn('[utools] Viewer 未就绪');
+    return;
+  }
   const center = getViewCenterCartographic(viewer) || { lon: 116.397463, lat: 39.90869, height: 0 };
   const scaleStr = window.prompt("输入缩放系数(可选)", "1");
   const scale = scaleStr ? Number(scaleStr) || 1 : 1;
@@ -442,14 +476,16 @@ const onFunctionClick = () => {
 // 生命周期钩子
 onMounted(() => {
   toolbarManager.init();
-  // 初始化 2D/3D 状态并监听形态切换完成事件
-  const viewer = window._earth.viewer;
-  if (viewer && viewer.scene) {
-    is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
-    viewer.scene.morphComplete.addEventListener(() => {
+  // 初始化 2D/3D 状态并监听形态切换完成事件（等待 viewer 就绪）
+  (async () => {
+    const viewer = await waitForViewerReady();
+    if (viewer && viewer.scene) {
       is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
-    });
-  }
+      viewer.scene.morphComplete.addEventListener(() => {
+        is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
+      });
+    }
+  })();
 });
 
 onUnmounted(() => {
@@ -458,7 +494,11 @@ onUnmounted(() => {
 
 // 2D/3D 切换
 const toggle2D3D = () => {
-  const viewer = window._earth.viewer;
+  const viewer = getViewer();
+  if (!viewer) {
+    console.warn('[utools] Viewer 未就绪，无法切换 2D/3D');
+    return;
+  }
   const scene = viewer.scene;
   // 根据当前模式进行形态切换，过渡动画时长约 0.8s
   if (scene.mode === Cesium.SceneMode.SCENE2D) {
