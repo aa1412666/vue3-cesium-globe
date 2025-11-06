@@ -213,6 +213,19 @@
     >
       <span class="mode-label">风</span>
     </button>
+    <!-- 风场参数面板（仅开启时显示） -->
+    <div v-if="wind2DEnabled" class="wind-panel">
+      <div class="row">
+        <label>粒子数量</label>
+        <input type="range" min="300" max="4000" step="100" v-model.number="windParticleCount" @change="applyWindParticleCount"/>
+        <span class="val">{{ windParticleCount }}</span>
+      </div>
+      <div class="row">
+        <label>速度倍率</label>
+        <input type="range" min="1" max="20" step="1" v-model.number="windSpeedScale" @change="applyWindSpeedScale"/>
+        <span class="val">×{{ windSpeedScale }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -226,8 +239,8 @@ import MeasureProjectedDistance from "../../utils/CesiumUtils/measureProjectedDi
 import MeasureProjectedArea from "../../utils/CesiumUtils/measureProjectedArea";// 引入测量投影面积类
 import { addModelEntity } from "../../utils/CesiumUtils/addModel"; // 引入模型加载工具
 import WindLayer2D from "../../utils/CesiumUtils/WindLayer2D"; // 引入2D风场图层（相对路径规避别名类型提示）
-// 定义emit事件
-const emit = defineEmits<{}>();
+// 定义emit事件（声明 compass 以消除非声明监听警告）
+const emit = defineEmits(["compass"]);
 
 // 按钮基类
 abstract class BaseButton {
@@ -467,6 +480,8 @@ const showCircleRing = ref(false);
 const is2D = ref(false);
 const wind2DEnabled = ref(false);
 let windLayer: WindLayer2D | null = null;
+const windParticleCount = ref(1200);
+const windSpeedScale = ref(8);
 
 // 响应式更新显示状态
 const updateDisplayStates = () => {
@@ -498,7 +513,7 @@ onMounted(() => {
         is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
         // 如果处于2D且风场应开启，但层未创建，自动显示
         if (is2D.value && wind2DEnabled.value) {
-          if (!windLayer) windLayer = new WindLayer2D(viewer);
+          if (!windLayer) windLayer = new WindLayer2D(viewer, { particleCount: windParticleCount.value, speedScale: windSpeedScale.value });
           windLayer.show();
         } else if (!is2D.value && windLayer) {
           // 进入3D时隐藏风场
@@ -552,11 +567,19 @@ const toggleWind2D = async () => {
   // 已经在2D
   wind2DEnabled.value = !wind2DEnabled.value;
   if (wind2DEnabled.value) {
-    if (!windLayer) windLayer = new WindLayer2D(viewer);
+    if (!windLayer) windLayer = new WindLayer2D(viewer, { particleCount: windParticleCount.value, speedScale: windSpeedScale.value });
     windLayer.show();
   } else {
     if (windLayer) windLayer.hide();
   }
+};
+
+// 应用参数到风场
+const applyWindParticleCount = () => {
+  if (windLayer) windLayer.setParticleCount(windParticleCount.value);
+};
+const applyWindSpeedScale = () => {
+  if (windLayer) windLayer.setSpeedScale(windSpeedScale.value);
 };
 </script>
 
@@ -627,6 +650,37 @@ const toggleWind2D = async () => {
   font-weight: 800;
   letter-spacing: 0.5px;
   font-size: 12px;
+}
+
+/* 风场参数面板 */
+.wind-panel {
+  position: relative;
+  margin-top: 8px;
+  padding: 10px 12px;
+  width: 220px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  color: #fff;
+}
+.wind-panel .row {
+  display: grid;
+  grid-template-columns: 70px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wind-panel .row:last-child { margin-bottom: 0; }
+.wind-panel label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.wind-panel .val {
+  font-size: 12px;
+  opacity: 0.9;
+  min-width: 40px;
+  text-align: right;
 }
 
 /* 风字按钮文字样式 */
