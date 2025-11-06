@@ -203,6 +203,16 @@
     >
       <span class="mode-label">{{ is2D ? '2D' : '3D' }}</span>
     </button>
+    <!-- 风场(2D) 切换按钮 -->
+    <button
+      class="tool-btn"
+      :class="{ active: wind2DEnabled }"
+      :title="wind2DEnabled ? '关闭风场(仅2D)' : '开启风场(仅2D)'"
+      @click="toggleWind2D"
+      key="toggle-wind2d-btn"
+    >
+      <span class="mode-label">风</span>
+    </button>
   </div>
 </template>
 
@@ -210,11 +220,12 @@
 import { ref, onMounted, onUnmounted } from "vue"; // 引入Vue的响应式和生命周期函数
 import * as Cesium from "cesium";
 import CircleRingOverlay from "./CircleRingOverlay.vue"; // 引入圆环界面组件
-import MeasureTool from "@/utils/CesiumUtils/measureDistance";// 引入测量工具类
-import MeasureSurfaceDistance from "@/utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
-import MeasureProjectedDistance from "@/utils/CesiumUtils/measureProjectedDistance";// 引入测量投影距离类
-import MeasureProjectedArea from "@/utils/CesiumUtils/measureProjectedArea";// 引入测量投影面积类
-import { addModelEntity } from "@/utils/CesiumUtils/addModel"; // 引入模型加载工具
+import MeasureTool from "../../utils/CesiumUtils/measureDistance";// 引入测量工具类
+import MeasureSurfaceDistance from "../../utils/CesiumUtils/measureSurfaceDistance";// 引入测量地表距离类
+import MeasureProjectedDistance from "../../utils/CesiumUtils/measureProjectedDistance";// 引入测量投影距离类
+import MeasureProjectedArea from "../../utils/CesiumUtils/measureProjectedArea";// 引入测量投影面积类
+import { addModelEntity } from "../../utils/CesiumUtils/addModel"; // 引入模型加载工具
+import WindLayer2D from "../../utils/CesiumUtils/WindLayer2D"; // 引入2D风场图层（相对路径规避别名类型提示）
 // 定义emit事件
 const emit = defineEmits<{}>();
 
@@ -454,6 +465,8 @@ const toolbarManager = new ToolbarManager();
 const showMeasureTools = ref(false);
 const showCircleRing = ref(false);
 const is2D = ref(false);
+const wind2DEnabled = ref(false);
+let windLayer: WindLayer2D | null = null;
 
 // 响应式更新显示状态
 const updateDisplayStates = () => {
@@ -483,6 +496,14 @@ onMounted(() => {
       is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
       viewer.scene.morphComplete.addEventListener(() => {
         is2D.value = viewer.scene.mode === Cesium.SceneMode.SCENE2D;
+        // 如果处于2D且风场应开启，但层未创建，自动显示
+        if (is2D.value && wind2DEnabled.value) {
+          if (!windLayer) windLayer = new WindLayer2D(viewer);
+          windLayer.show();
+        } else if (!is2D.value && windLayer) {
+          // 进入3D时隐藏风场
+          windLayer.hide();
+        }
       });
     }
   })();
@@ -490,6 +511,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   toolbarManager.destroy();
+  if (windLayer) {
+    windLayer.destroy();
+    windLayer = null;
+  }
 });
 
 // 2D/3D 切换
@@ -505,6 +530,32 @@ const toggle2D3D = () => {
     scene.morphTo3D(0.8);
   } else {
     scene.morphTo2D(0.8);
+  }
+};
+
+// 风场(2D) 开关
+const toggleWind2D = async () => {
+  const viewer = await waitForViewerReady();
+  if (!viewer) return console.warn('[utools] Viewer 未就绪，无法切换风场');
+  if (!is2D.value) {
+    // 不在2D，先切换到2D，切换完成后再开启
+    wind2DEnabled.value = !wind2DEnabled.value;
+    if (wind2DEnabled.value) {
+      viewer.scene.morphTo2D(0.8);
+      // 在 morphComplete 监听里会自动 show()
+    } else {
+      if (windLayer) windLayer.hide();
+    }
+    return;
+  }
+
+  // 已经在2D
+  wind2DEnabled.value = !wind2DEnabled.value;
+  if (wind2DEnabled.value) {
+    if (!windLayer) windLayer = new WindLayer2D(viewer);
+    windLayer.show();
+  } else {
+    if (windLayer) windLayer.hide();
   }
 };
 </script>
@@ -572,6 +623,14 @@ const toggle2D3D = () => {
 
 /* 2D/3D 切换按钮文字样式 */
 .mode-toggle-btn .mode-label {
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 12px;
+}
+
+/* 风字按钮文字样式 */
+.tool-btn .mode-label {
   color: #fff;
   font-weight: 800;
   letter-spacing: 0.5px;
